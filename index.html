@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DreamDiary.AI - Your AI Memory Journal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="sky-background">
+        <!-- Light Mode Elements -->
+        <div class="sun"></div>
+        <div class="cloud cloud-1"></div>
+        <div class="cloud cloud-2"></div>
+        <div class="cloud cloud-3"></div>
+        
+        <!-- Dark Mode Elements -->
+        <div class="moon"></div>
+        <div class="stars" id="stars-container"></div>
+    </div>
+
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" id="theme-toggle">🌙</button>
+
+    <!-- Auth Section -->
+    <div id="auth-section" class="auth-section" style="display: none;">
+        <div class="auth-container">
+            <div class="auth-form">
+                <h3>Welcome to DreamDiary</h3>
+                <div class="auth-tabs">
+                    <button class="auth-tab active" onclick="showAuthTab('login')">Login</button>
+                    <button class="auth-tab" onclick="showAuthTab('signup')">Sign Up</button>
+                </div>
+                <div id="login-form" class="auth-content">
+                    <input type="email" id="login-email" placeholder="Email" class="auth-input">
+                    <input type="password" id="login-password" placeholder="Password" class="auth-input">
+                    <button onclick="login()" class="auth-btn">Login</button>
+                </div>
+                <div id="signup-form" class="auth-content" style="display: none;">
+                    <input type="email" id="signup-email" placeholder="Email" class="auth-input">
+                    <input type="password" id="signup-password" placeholder="Password" class="auth-input">
+                    <button onclick="signup()" class="auth-btn">Sign Up</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Container -->
+    <div class="app-container">
+        <!-- Home Screen -->
+        <div id="home-screen" class="screen active">
+            <header class="app-header">
+                <h1 class="app-title">DreamDiary.AI</h1>
+                <p class="app-tagline">A quiet place to remember and reflect.</p>
+                <div class="user-info" id="user-info" style="display: none;">
+                    <span id="user-email"></span>
+                    <button onclick="logout()" class="logout-btn">Logout</button>
+                </div>
+            </header>
+            
+            <div class="actions-grid">
+                <button class="action-btn" onclick="showScreen('add-memory-screen')">
+                    <span class="btn-icon">📝</span>
+                    <span class="btn-text">Add Memory</span>
+                </button>
+                
+                <button class="action-btn" onclick="showScreen('memories-screen')">
+                    <span class="btn-icon">📚</span>
+                    <span class="btn-text">Past Memories</span>
+                </button>
+                
+                <button class="action-btn" onclick="showScreen('summary-screen')">
+                    <span class="btn-icon">✨</span>
+                    <span class="btn-text">AI Summary</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Add Memory Screen -->
+        <div id="add-memory-screen" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('home-screen')">← Back</button>
+                <div class="current-date" id="current-date"></div>
+            </div>
+
+            <form class="memory-form" id="memory-form">
+                <div class="form-group">
+                    <label for="memory-text" class="form-label">How was your day?</label>
+                    <textarea 
+                        id="memory-text" 
+                        class="memory-textarea" 
+                        placeholder="Write about a moment that made you smile..."
+                        rows="6"
+                    ></textarea>
+                    <div class="ai-hint">💡 Write about a moment that made you smile...</div>
+                </div>
+
+                <div class="form-group">
+                    <div class="collapsible-section">
+                        <button type="button" class="collapsible-header" onclick="toggleDreamSection()">
+                            <span>▸ Did you have a dream?</span>
+                        </button>
+                        <div class="collapsible-content" id="dream-section">
+                            <textarea 
+                                id="dream-text" 
+                                class="dream-textarea" 
+                                placeholder="Describe your dream..."
+                                rows="4"
+                            ></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="photo-uploader">
+                        <label class="upload-label">
+                            <input type="file" id="photo-upload" accept="image/*" hidden>
+                            <span class="upload-content">
+                                <span class="upload-icon">📷</span>
+                                <span class="upload-text">Add Photo</span>
+                            </span>
+                        </label>
+                        <div class="photo-preview" id="photo-preview"></div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="save-btn">
+                        Save Memory
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Past Memories Screen -->
+        <div id="memories-screen" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('home-screen')">← Back</button>
+                <div class="memories-actions">
+                    <button class="calendar-btn" onclick="toggleCalendar()">📅</button>
+                    <button class="clear-btn" onclick="showClearConfirmation()">🗑️ Clear All</button>
+                </div>
+            </div>
+
+            <div class="memories-container">
+                <div class="selection-actions" id="selection-actions" style="display: none;">
+                    <div class="selection-info" id="selection-info">0 memories selected</div>
+                    <div class="selection-buttons">
+                        <button class="select-all-btn" onclick="toggleSelectAll()">Select All</button>
+                        <button class="delete-selected-btn" onclick="deleteSelectedMemories()">Delete Selected</button>
+                    </div>
+                </div>
+                
+                <div class="memories-list" id="memories-list">
+                    <!-- Memories will be dynamically inserted here -->
+                </div>
+                
+                <div class="calendar-sidebar" id="calendar-sidebar">
+                    <div class="calendar-header">
+                        <h3>Jump to Date</h3>
+                        <button class="close-calendar" onclick="toggleCalendar()">×</button>
+                    </div>
+                    <div class="calendar-content">
+                        <!-- Calendar will be dynamically generated -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Summary Screen -->
+        <div id="summary-screen" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('home-screen')">← Back</button>
+            </div>
+
+            <div class="summary-content">
+                <div class="weekly-summary">
+                    <h2 class="summary-title" id="summary-title">🎭 Your Week of Quiet Returns</h2>
+                    
+                    <div class="emotion-graph">
+                        <h3>Emotional Landscape</h3>
+                        <div class="emotion-bars">
+                            <div class="emotion-bar">
+                                <div class="bar-label">Calm</div>
+                                <div class="bar-container">
+                                    <div class="bar-fill calm" style="width: 0%"></div>
+                                </div>
+                                <div class="bar-percentage">0%</div>
+                            </div>
+                            <div class="emotion-bar">
+                                <div class="bar-label">Hopeful</div>
+                                <div class="bar-container">
+                                    <div class="bar-fill hopeful" style="width: 0%"></div>
+                                </div>
+                                <div class="bar-percentage">0%</div>
+                            </div>
+                            <div class="emotion-bar">
+                                <div class="bar-label">Reflective</div>
+                                <div class="bar-container">
+                                    <div class="bar-fill reflective" style="width: 0%"></div>
+                                </div>
+                                <div class="bar-percentage">0%</div>
+                            </div>
+                            <div class="emotion-bar">
+                                <div class="bar-label">Creative</div>
+                                <div class="bar-container">
+                                    <div class="bar-fill creative" style="width: 0%"></div>
+                                </div>
+                                <div class="bar-percentage">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="monthly-wrapped">
+                    <h3>🎁 Monthly Mind Wrapped</h3>
+                    <div class="wrapped-card">
+                        <p id="ai-summary-text">Start writing memories to unlock your personalized AI summary!</p>
+                        <div class="wrapped-actions">
+                            <button class="share-btn" onclick="shareMonthlyWrap()">📤 Share</button>
+                            <button class="download-btn" onclick="downloadMonthlyWrap()">⬇️ Download</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="summary-countdown" id="summary-countdown">
+                    <p>Next weekly summary in <span id="countdown-days">7</span> days</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Reflection Modal -->
+    <div id="reflection-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✨ Memory saved</h3>
+                <p>Your story is safe here.</p>
+            </div>
+            <div class="ai-reflection" id="ai-reflection-text">
+                "A peaceful day filled with gentle moments of clarity"
+            </div>
+            <div class="emotion-badge calm">
+                🟢 Calm · <span id="emotion-intensity">78%</span>
+            </div>
+            <button class="modal-close" onclick="closeModal()">Continue</button>
+        </div>
+    </div>
+
+    <!-- Clear Confirmation Modal -->
+    <div id="clear-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🗑️ Clear All Memories</h3>
+                <p>This will permanently delete all your memories.</p>
+            </div>
+            <div class="clear-warning">
+                <p>⚠️ This action cannot be undone!</p>
+                <p>All <span id="memories-count">0</span> memories will be lost forever.</p>
+            </div>
+            <div class="clear-actions">
+                <button class="cancel-btn" onclick="closeClearModal()">Cancel</button>
+                <button class="confirm-clear-btn" onclick="clearAllMemories()">Yes, Clear Everything</button>
+            </div>
+        </div>
+    </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+  // Initialize Supabase client globally
+  const SUPABASE_URL = "https://bxgiqrcpxsmjlzjlirek.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4Z2lxcmNweHNtamx6amxpcmVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0MzAxNDYsImV4cCI6MjA3ODAwNjE0Nn0.UT-13X6k4HAIwhrQ_j6zD6ICaNxN9zmOfPJK3iORtjM";
+
+  // Make Supabase available everywhere
+  window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+</script>
+    <script src="script.js"></script>
+</body>
+</html>
