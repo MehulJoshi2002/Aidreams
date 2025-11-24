@@ -4,7 +4,7 @@ let selectedMemories = new Set();
 let currentUser = null;
 
 // Your CORRECT Cohere API Key
-const COHERE_API_KEY = 'YZ8pbZOky1KrT88bBarvzREFdsjV4nc2dB3XFJ4i';
+const COHERE_API_KEY = 'AYvt6WTZ0WMDTl87FJodrCCQQC93twJHkg37SJ0g';
 const COHERE_CHAT_API = 'https://api.cohere.ai/v1/chat';
 
 // ======== SUPABASE FUNCTIONS ========
@@ -1172,4 +1172,5 @@ function generateEnhancedReflection(memoryText, dreamText, emotion, intensity) {
     }
 
     return reflection;
+
 }
