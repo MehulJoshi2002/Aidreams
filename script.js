@@ -1,11 +1,11 @@
-// DreamDiary.AI - Complete Version with Supabase Integration
+// DreamDiary.AI - Complete Version with Supabase & Groq AI Integration
 let memories = [];
 let selectedMemories = new Set();
 let currentUser = null;
 
-// Your CORRECT Cohere API Key
-const COHERE_API_KEY = 'AYvt6WTZ0WMDTl87FJodrCCQQC93twJHkg37SJ0g';
-const COHERE_CHAT_API = 'https://api.cohere.ai/v1/chat';
+// Groq API Configuration
+const GROQ_API_KEY = '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';
+const GROQ_CHAT_API = 'https://api.groq.com/openai/v1/chat/completions';
 
 // ======== SUPABASE FUNCTIONS ========
 async function testSupabase() {
@@ -192,6 +192,115 @@ async function deleteSelectedMemoriesFromSupabase(memoryIds) {
     return true;
 }
 
+// ======== GROQ AI FUNCTIONS ========
+async function generateWithGroq(memoryText, dreamText, emotion, intensity) {
+    try {
+        console.log('🚀 Calling Groq API...');
+        
+        const response = await fetch(GROQ_CHAT_API, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'llama3-8b-8192', // Fast and free model
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are DreamDiary AI - a warm, compassionate journal assistant. Create a brief, personalized reflection (2-3 sentences) that responds specifically to what the person wrote. Be genuine, caring, and insightful. Use 1-2 emojis naturally.`
+                    },
+                    {
+                        role: 'user',
+                        content: `The person wrote this in their journal: "${memoryText}"
+${dreamText ? `They also described this dream: "${dreamText}"` : ''}
+Based on their writing, they seem to be feeling ${emotion} (${intensity}% intensity).
+
+Please write a reflection that shows you truly understand their experience and offers gentle insight:`
+                    }
+                ],
+                temperature: 0.8,
+                max_tokens: 150,
+                stream: false
+            })
+        });
+
+        console.log('📊 Groq response status:', response.status);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('❌ Groq API error:', errorData);
+            throw new Error(`Groq API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+        }
+
+        const data = await response.json();
+        console.log('✅ Groq response received:', data);
+        
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+            return data.choices[0].message.content.trim();
+        } else {
+            throw new Error('Invalid response format from Groq API');
+        }
+        
+    } catch (error) {
+        console.error('❌ Groq API call failed:', error);
+        throw new Error('Groq AI service is currently unavailable. Using enhanced reflection system instead.');
+    }
+}
+
+// Enhanced AI Service with Fallbacks
+class AIService {
+    constructor() {
+        this.providers = ['groq', 'enhanced-local'];
+        this.currentProvider = 'groq';
+    }
+
+    async generateReflection(memoryText, dreamText, emotion, intensity) {
+        console.log(`🤖 Attempting AI reflection with ${this.currentProvider}...`);
+
+        for (const provider of this.providers) {
+            try {
+                let reflection;
+                
+                switch(provider) {
+                    case 'groq':
+                        reflection = await generateWithGroq(memoryText, dreamText, emotion, intensity);
+                        break;
+                    case 'enhanced-local':
+                        reflection = generateEnhancedReflection(memoryText, dreamText, emotion, intensity);
+                        break;
+                }
+
+                if (reflection) {
+                    console.log(`✅ Success with ${provider}`);
+                    this.currentProvider = provider;
+                    return reflection;
+                }
+            } catch (error) {
+                console.warn(`❌ ${provider} failed:`, error.message);
+                continue;
+            }
+        }
+
+        // Ultimate fallback
+        return this.generateFallbackReflection(emotion);
+    }
+
+    generateFallbackReflection(emotion) {
+        const fallbacks = [
+            "Thank you for sharing this moment. Your words create space for reflection and growth. 📖",
+            "Your self-awareness in this experience is valuable. Each memory adds to your journey. 💫",
+            "This moment matters. Your willingness to reflect shows beautiful emotional intelligence. 🌟",
+            "Your story is safe here. Every experience contributes to your unique path. 📚"
+        ];
+        
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+}
+
+// Initialize AI Service
+const aiService = new AIService();
+
 // ======== MODIFIED EXISTING FUNCTIONS ========
 async function handleFormSubmit(e) {
     e.preventDefault();
@@ -227,15 +336,9 @@ async function handleFormSubmit(e) {
         const emotionData = analyzeTextForEmotion(memoryText);
         console.log('✅ Emotion detected:', emotionData);
         
-        // Get AI reflection from Cohere Chat API
-        let aiReflection;
-        try {
-            aiReflection = await generateWithCohereChat(memoryText, dreamText, emotionData.emotion, emotionData.intensity);
-            console.log('✅ Cohere AI reflection generated');
-        } catch (cohereError) {
-            console.warn('🤖 Cohere failed, using enhanced reflection:', cohereError.message);
-            aiReflection = generateEnhancedReflection(memoryText, dreamText, emotionData.emotion, emotionData.intensity);
-        }
+        // Get AI reflection from our multi-layer service
+        const aiReflection = await aiService.generateReflection(memoryText, dreamText, emotionData.emotion, emotionData.intensity);
+        console.log('✅ AI reflection generated');
         
         const newMemory = {
             memory_text: memoryText,
@@ -497,7 +600,7 @@ function initializeApp() {
 
 // DOM Content Loaded
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 DreamDiary.AI with Supabase & Real Cohere AI');
+    console.log('🚀 DreamDiary.AI with Supabase & Groq AI');
     
     // Load theme
     const savedTheme = localStorage.getItem('dreamdiary_theme');
@@ -945,89 +1048,73 @@ function updateCountdown() {
     countdownElement.textContent = nextSummaryIn;
 }
 
-// AI Functions (Cohere integration)
-async function generateWithCohereChat(memoryText, dreamText, emotion, intensity) {
-    try {
-        const models = [
-            'command-r', 'command-r-plus', 'command', 'command-light', 'command-nightly'
+// Enhanced Local Reflection System
+function generateEnhancedReflection(memoryText, dreamText, emotion, intensity) {
+    const text = memoryText.toLowerCase();
+    
+    const contexts = {
+        work: /(work|job|office|meeting|boss|colleague|project|deadline|career|salary|promotion|team)/.test(text),
+        family: /(family|mom|dad|parent|child|son|daughter|wife|husband|partner|sibling|brother|sister)/.test(text),
+        friends: /(friend|buddy|pal|hang out|together|group|social|party|dinner|coffee)/.test(text),
+        nature: /(walk|park|outside|sun|nature|tree|sky|beach|mountain|hike|garden|fresh air)/.test(text),
+        achievement: /(finished|completed|achieved|accomplished|succeeded|won|award|milestone|goal)/.test(text),
+        health: /(sick|ill|pain|doctor|hospital|health|recovery|medicine|therapy|wellness)/.test(text),
+        creative: /(write|paint|draw|create|music|art|poem|story|design|build|craft|project)/.test(text),
+        learning: /(learn|study|read|book|course|knowledge|skill|education)/.test(text)
+    };
+
+    const context = Object.keys(contexts).find(key => contexts[key]) || 'general';
+
+    const reflections = {
+        joy: {
+            work: `Your work satisfaction is wonderful! ${intensity > 80 ? "The sheer joy in your professional life is truly inspiring!" : "Finding happiness in work makes such a difference."} 🌟`,
+            family: `The love in family moments creates precious memories. ${text.includes('laugh') ? "The laughter and connection you shared is beautiful!" : "These bonds are truly special."} 💕`,
+            friends: `Friendship joy is pure magic! ${text.includes('together') ? "Time spent with loved ones creates the best memories." : "These connections nourish the soul."} 😊`,
+            nature: `Nature's beauty combined with your joyful spirit is perfect. ${text.includes('sun') ? "The sunshine seems to mirror your inner light!" : "The peace you found is palpable."} 🌿`,
+            achievement: `Celebrating achievements with genuine happiness is important! ${intensity > 85 ? "Your well-deserved success radiates through your words!" : "You've earned this joyful moment."} 🎉`,
+            health: `Finding joy in health and recovery is powerful! ${text.includes('better') ? "Your improving wellbeing shines through beautifully!" : "Your positive outlook is inspiring."} 💪`,
+            creative: `Creative joy is so fulfilling! ${text.includes('create') ? "The satisfaction of bringing something new into the world is magical!" : "Your artistic expression is wonderful."} 🎨`,
+            learning: `Learning with joy is incredible! ${text.includes('discover') ? "The thrill of discovery is absolutely wonderful!" : "Your curiosity and growth are inspiring."} 📚`,
+            general: `Your happiness is contagious! ${intensity > 75 ? "This radiant joy truly lights up the page!" : "These positive moments are precious gifts."} ✨`
+        },
+        sadness: {
+            work: `Work challenges can be heavy. ${intensity > 70 ? "The weight of this professional struggle is palpable, but your resilience shines through." : "Your awareness of these difficulties shows emotional intelligence."} 💪`,
+            family: `Family emotions run deep. ${text.includes('miss') ? "The ache of missing someone shows how much you care." : "Your willingness to feel these complex emotions is brave."} 🫂`,
+            health: `Health struggles are incredibly difficult. ${text.includes('pain') ? "The physical or emotional pain you're experiencing is valid and real." : "Your strength in facing health challenges is admirable."} 🏥`,
+            general: `There's courage in honoring sad moments. ${intensity > 80 ? "The depth of this sadness speaks to your capacity for deep feeling." : "Your emotional honesty creates space for healing."} 💙`
+        },
+        anger: {
+            work: `Work frustrations are completely valid. ${intensity > 75 ? "The intensity of your reaction shows how much you care about fairness and respect." : "Your strong boundaries in professional settings are important."} 🔥`,
+            general: `Your powerful emotions highlight important values. ${text.includes('unfair') ? "Your sense of justice is clear and deserves to be heard." : "This intensity often precedes meaningful change."} 💎`
+        },
+        fear: {
+            work: `Work anxieties are real. ${intensity > 70 ? "The overwhelming nature of these worries is completely understandable." : "Your awareness of workplace stress is actually protective."} 🛡️`,
+            health: `Health worries can be consuming. ${text.includes('scared') ? "The fear you're experiencing is valid and human." : "Your vigilance about wellbeing comes from self-care."} 💊`,
+            general: `Facing fears takes remarkable courage. ${intensity > 75 ? "The magnitude of what you're facing is real, and so is your strength." : "Your emotional awareness is your greatest asset here."} 🌟`
+        },
+        surprise: {
+            work: `Unexpected moments at work! ${intensity > 70 ? "This surprise really shook things up in your professional world!" : "Your adaptability in unexpected situations is impressive."} ⚡`,
+            general: `Life's surprises keep us growing! ${intensity > 70 ? "The sheer unexpectedness of this moment is electrifying!" : "Your openness to surprises shows wonderful adaptability."} 🎊`
+        },
+        neutral: {
+            general: `Your calm observation creates space for insight. ${text.includes('think') ? "Your thoughtful reflection shows wonderful self-awareness." : "There's wisdom in quiet moments of awareness."} 🕊️`
+        }
+    };
+
+    const reflection = reflections[emotion]?.[context] || 
+                      reflections[emotion]?.general || 
+                      "Thank you for sharing this meaningful moment. Your self-awareness creates space for insight and growth. 📖";
+
+    if (dreamText && dreamText.trim().length > 0) {
+        const dreamInsights = [
+            " Your dream adds fascinating layers to today's emotional landscape.",
+            " The dream narrative provides deep insight into your subconscious processing.",
+            " Your nighttime journey offers valuable perspective on your waking experiences."
         ];
-
-        let lastError = null;
-        
-        for (const model of models) {
-            try {
-                console.log(`🤖 Trying model: ${model}`);
-                const response = await fetch(COHERE_CHAT_API, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${COHERE_API_KEY}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        model: model,
-                        message: `You are DreamDiary AI - a warm, compassionate journal assistant. Create a brief, personalized reflection (2-3 sentences) that responds specifically to what the person wrote. Be genuine, caring, and insightful. Use 1-2 emojis naturally.
-
-The person wrote this in their journal: "${memoryText}"
-${dreamText ? `They also described this dream: "${dreamText}"` : ''}
-Based on their writing, they seem to be feeling ${emotion} (${intensity}% intensity).
-
-Please write a reflection that shows you truly understand their experience and offers gentle insight:`,
-                        temperature: 0.8,
-                        max_tokens: 120
-                    })
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    lastError = new Error(`Cohere API error with ${model}: ${response.status} - ${errorData.message || 'Unknown error'}`);
-                    console.log(`❌ Model ${model} failed:`, errorData.message);
-                    continue;
-                }
-
-                const data = await response.json();
-                console.log(`✅ Success with model: ${model}`);
-                return data.text.trim();
-                
-            } catch (error) {
-                lastError = error;
-                console.log(`❌ Model ${model} error:`, error.message);
-                continue;
-            }
-        }
-
-        console.log('🤖 Trying without model specification...');
-        const response = await fetch(COHERE_CHAT_API, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${COHERE_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                message: `You are DreamDiary AI - a warm, compassionate journal assistant. Create a brief, personalized reflection (2-3 sentences) that responds specifically to what the person wrote. Be genuine, caring, and insightful. Use 1-2 emojis naturally.
-
-The person wrote this in their journal: "${memoryText}"
-${dreamText ? `They also described this dream: "${dreamText}"` : ''}
-Based on their writing, they seem to be feeling ${emotion} (${intensity}% intensity).
-
-Please write a reflection that shows you truly understand their experience and offers gentle insight:`,
-                temperature: 0.8,
-                max_tokens: 120
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Cohere API error (no model): ${response.status} - ${errorData.message || 'Unknown error'}`);
-        }
-
-        const data = await response.json();
-        console.log('✅ Success without model specification');
-        return data.text.trim();
-        
-    } catch (error) {
-        console.error('All Cohere API attempts failed:', error);
-        throw new Error('Cohere AI service is currently unavailable. Using enhanced reflection system instead.');
+        return reflection + dreamInsights[Math.floor(Math.random() * dreamInsights.length)];
     }
+
+    return reflection;
 }
 
 function analyzeTextForEmotion(text) {
@@ -1104,73 +1191,4 @@ function analyzeTextForEmotion(text) {
         emotion: dominantEmotion,
         intensity: intensity
     };
-}
-
-function generateEnhancedReflection(memoryText, dreamText, emotion, intensity) {
-    const text = memoryText.toLowerCase();
-    
-    const contexts = {
-        work: /(work|job|office|meeting|boss|colleague|project|deadline|career|salary|promotion|team)/.test(text),
-        family: /(family|mom|dad|parent|child|son|daughter|wife|husband|partner|sibling|brother|sister)/.test(text),
-        friends: /(friend|buddy|pal|hang out|together|group|social|party|dinner|coffee)/.test(text),
-        nature: /(walk|park|outside|sun|nature|tree|sky|beach|mountain|hike|garden|fresh air)/.test(text),
-        achievement: /(finished|completed|achieved|accomplished|succeeded|won|award|milestone|goal)/.test(text),
-        health: /(sick|ill|pain|doctor|hospital|health|recovery|medicine|therapy|wellness)/.test(text),
-        creative: /(write|paint|draw|create|music|art|poem|story|design|build|craft|project)/.test(text),
-        learning: /(learn|study|read|book|course|knowledge|skill|education)/.test(text)
-    };
-
-    const context = Object.keys(contexts).find(key => contexts[key]) || 'general';
-
-    const reflections = {
-        joy: {
-            work: `Your work satisfaction is wonderful! ${intensity > 80 ? "The sheer joy in your professional life is truly inspiring!" : "Finding happiness in work makes such a difference."} 🌟`,
-            family: `The love in family moments creates precious memories. ${text.includes('laugh') ? "The laughter and connection you shared is beautiful!" : "These bonds are truly special."} 💕`,
-            friends: `Friendship joy is pure magic! ${text.includes('together') ? "Time spent with loved ones creates the best memories." : "These connections nourish the soul."} 😊`,
-            nature: `Nature's beauty combined with your joyful spirit is perfect. ${text.includes('sun') ? "The sunshine seems to mirror your inner light!" : "The peace you found is palpable."} 🌿`,
-            achievement: `Celebrating achievements with genuine happiness is important! ${intensity > 85 ? "Your well-deserved success radiates through your words!" : "You've earned this joyful moment."} 🎉`,
-            health: `Finding joy in health and recovery is powerful! ${text.includes('better') ? "Your improving wellbeing shines through beautifully!" : "Your positive outlook is inspiring."} 💪`,
-            creative: `Creative joy is so fulfilling! ${text.includes('create') ? "The satisfaction of bringing something new into the world is magical!" : "Your artistic expression is wonderful."} 🎨`,
-            learning: `Learning with joy is incredible! ${text.includes('discover') ? "The thrill of discovery is absolutely wonderful!" : "Your curiosity and growth are inspiring."} 📚`,
-            general: `Your happiness is contagious! ${intensity > 75 ? "This radiant joy truly lights up the page!" : "These positive moments are precious gifts."} ✨`
-        },
-        sadness: {
-            work: `Work challenges can be heavy. ${intensity > 70 ? "The weight of this professional struggle is palpable, but your resilience shines through." : "Your awareness of these difficulties shows emotional intelligence."} 💪`,
-            family: `Family emotions run deep. ${text.includes('miss') ? "The ache of missing someone shows how much you care." : "Your willingness to feel these complex emotions is brave."} 🫂`,
-            health: `Health struggles are incredibly difficult. ${text.includes('pain') ? "The physical or emotional pain you're experiencing is valid and real." : "Your strength in facing health challenges is admirable."} 🏥`,
-            general: `There's courage in honoring sad moments. ${intensity > 80 ? "The depth of this sadness speaks to your capacity for deep feeling." : "Your emotional honesty creates space for healing."} 💙`
-        },
-        anger: {
-            work: `Work frustrations are completely valid. ${intensity > 75 ? "The intensity of your reaction shows how much you care about fairness and respect." : "Your strong boundaries in professional settings are important."} 🔥`,
-            general: `Your powerful emotions highlight important values. ${text.includes('unfair') ? "Your sense of justice is clear and deserves to be heard." : "This intensity often precedes meaningful change."} 💎`
-        },
-        fear: {
-            work: `Work anxieties are real. ${intensity > 70 ? "The overwhelming nature of these worries is completely understandable." : "Your awareness of workplace stress is actually protective."} 🛡️`,
-            health: `Health worries can be consuming. ${text.includes('scared') ? "The fear you're experiencing is valid and human." : "Your vigilance about wellbeing comes from self-care."} 💊`,
-            general: `Facing fears takes remarkable courage. ${intensity > 75 ? "The magnitude of what you're facing is real, and so is your strength." : "Your emotional awareness is your greatest asset here."} 🌟`
-        },
-        surprise: {
-            work: `Unexpected moments at work! ${intensity > 70 ? "This surprise really shook things up in your professional world!" : "Your adaptability in unexpected situations is impressive."} ⚡`,
-            general: `Life's surprises keep us growing! ${intensity > 70 ? "The sheer unexpectedness of this moment is electrifying!" : "Your openness to surprises shows wonderful adaptability."} 🎊`
-        },
-        neutral: {
-            general: `Your calm observation creates space for insight. ${text.includes('think') ? "Your thoughtful reflection shows wonderful self-awareness." : "There's wisdom in quiet moments of awareness."} 🕊️`
-        }
-    };
-
-    const reflection = reflections[emotion]?.[context] || 
-                      reflections[emotion]?.general || 
-                      "Thank you for sharing this meaningful moment. Your self-awareness creates space for insight and growth. 📖";
-
-    if (dreamText && dreamText.trim().length > 0) {
-        const dreamInsights = [
-            " Your dream adds fascinating layers to today's emotional landscape.",
-            " The dream narrative provides deep insight into your subconscious processing.",
-            " Your nighttime journey offers valuable perspective on your waking experiences."
-        ];
-        return reflection + dreamInsights[Math.floor(Math.random() * dreamInsights.length)];
-    }
-
-    return reflection;
-
 }
