@@ -7,9 +7,6 @@ let currentUser = null;
 const GROQ_API_KEY = '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';
 const GROQ_CHAT_API = 'https://api.groq.com/openai/v1/chat/completions';
 
-// ======== SUPABASE CONFIGURATION ========
-// Using the global supabase client from your index.html
-
 // ======== SUPABASE FUNCTIONS ========
 async function testSupabase() {
     console.log('🧪 Testing Supabase connection...');
@@ -376,6 +373,7 @@ async function handleFormSubmit(e) {
         saveBtn.disabled = true;
         
         console.log('🤖 Analyzing your memory...');
+        console.log('Memory text:', memoryText);
         
         // Detect emotion using smart text analysis
         const emotionData = analyzeTextForEmotion(memoryText);
@@ -384,12 +382,16 @@ async function handleFormSubmit(e) {
         // Get AI reflection from Groq API
         let aiReflection;
         try {
+            console.log('🔄 Attempting Groq API call...');
             aiReflection = await generateWithGroq(memoryText, emotionData.emotion, emotionData.intensity);
-            console.log('✅ Groq AI reflection generated');
+            console.log('✅ Groq AI reflection generated successfully');
         } catch (groqError) {
             console.warn('🤖 Groq failed, using enhanced reflection:', groqError.message);
+            console.warn('Error details:', groqError);
             aiReflection = generateEnhancedReflection(memoryText, emotionData.emotion, emotionData.intensity);
         }
+        
+        console.log('📝 Final reflection:', aiReflection);
         
         const newMemory = {
             memory_text: memoryText,
@@ -721,6 +723,46 @@ function initializeApp() {
     }
 }
 
+// Test Groq API connectivity
+async function testGroqAPI() {
+    console.log('🧪 Testing Groq API connectivity...');
+    console.log('API Key length:', GROQ_API_KEY ? GROQ_API_KEY.length : 'Missing');
+    console.log('API Key starts with:', GROQ_API_KEY ? GROQ_API_KEY.substring(0, 10) + '...' : 'Missing');
+    
+    try {
+        // Simple test with minimal content
+        const testResponse = await fetch(GROQ_CHAT_API, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'llama3-8b-8192',
+                messages: [
+                    {
+                        role: 'user',
+                        content: 'Say "Test successful"'
+                    }
+                ],
+                max_tokens: 10
+            })
+        });
+        
+        console.log('📊 Test response status:', testResponse.status);
+        
+        if (testResponse.ok) {
+            const testData = await testResponse.json();
+            console.log('✅ Groq API test successful:', testData);
+        } else {
+            const errorText = await testResponse.text();
+            console.error('❌ Groq API test failed:', errorText);
+        }
+    } catch (error) {
+        console.error('❌ Groq API test error:', error);
+    }
+}
+
 // DOM Content Loaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 DreamDiary.AI with Supabase & Groq AI');
@@ -739,6 +781,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     initializeApp();
+    
+    // Test Groq API on load
+    testGroqAPI();
     
     // Check authentication with retry logic
     let retryCount = 0;
@@ -1184,6 +1229,8 @@ function updateCountdown() {
 async function generateWithGroq(memoryText, emotion, intensity) {
     try {
         console.log('🚀 Calling Groq API...');
+        console.log('API Key present:', !!GROQ_API_KEY);
+        console.log('API URL:', GROQ_CHAT_API);
         
         const response = await fetch(GROQ_CHAT_API, {
             method: 'POST',
@@ -1192,7 +1239,7 @@ async function generateWithGroq(memoryText, emotion, intensity) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'llama3-8b-8192', // Fast and free model from Groq
+                model: 'llama3-8b-8192',
                 messages: [
                     {
                         role: 'system',
@@ -1215,22 +1262,26 @@ Please write a reflection that shows you truly understand their experience and o
         console.log('📊 Groq response status:', response.status);
         
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('❌ Groq API error:', errorData);
-            throw new Error(`Groq API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+            const errorText = await response.text();
+            console.error('❌ Groq API error response:', errorText);
+            throw new Error(`Groq API error: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
         console.log('✅ Groq response received:', data);
         
         if (data.choices && data.choices[0] && data.choices[0].message) {
-            return data.choices[0].message.content.trim();
+            const reflection = data.choices[0].message.content.trim();
+            console.log('✅ AI Reflection:', reflection);
+            return reflection;
         } else {
+            console.error('❌ Invalid response format:', data);
             throw new Error('Invalid response format from Groq API');
         }
         
     } catch (error) {
         console.error('❌ Groq API call failed:', error);
+        console.error('Error details:', error.message);
         throw new Error('Groq AI service is currently unavailable. Using enhanced reflection system instead.');
     }
 }
