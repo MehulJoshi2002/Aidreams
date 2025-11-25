@@ -1,43 +1,68 @@
-// DreamDiary.AI - Complete Version with Supabase & Groq AI Integration
+// DreamDiary.AI - Complete Version with Supabase Integration
 let memories = [];
 let selectedMemories = new Set();
 let currentUser = null;
 
-// Groq API Configuration
+// Groq API Configuration - Hardcoded for client-side use
 const GROQ_API_KEY = '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';
 const GROQ_CHAT_API = 'https://api.groq.com/openai/v1/chat/completions';
 
-const SUPABASE_CONFIG = {
-    url: "https://bxgiqrcpxsmjlzjlirek.supabase.co",
-    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4Z2lxcmNweHNtamx6amxpcmVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0MzAxNDYsImV4cCI6MjA3ODAwNjE0Nn0.UT-13X6k4HAIwhrQ_j6zD6ICaNxN9zmOfPJK3iORtjM"
-};
+// ======== SUPABASE CONFIGURATION ========
+// Using the global supabase client from your index.html
 
 // ======== SUPABASE FUNCTIONS ========
 async function testSupabase() {
     console.log('🧪 Testing Supabase connection...');
     
+    if (!window.supabase) {
+        console.error('❌ Supabase client not available');
+        return false;
+    }
+    
     try {
-        const { data, error } = await supabase.from('memories').select('*');
+        const { data, error } = await window.supabase.from('memories').select('*').limit(1);
         
         if (error) {
             console.error('❌ Supabase error:', error);
+            return false;
         } else {
             console.log('✅ Supabase connected! Memories table is ready.');
-            console.log('Current memories:', data);
+            return true;
         }
     } catch (err) {
         console.error('❌ Connection failed:', err);
+        return false;
     }
 }
 
 async function checkAuth() {
-    const { data: { session }, error } = await supabase.auth.getSession();
+    if (!window.supabase) {
+        console.error('❌ Supabase not available');
+        showAuth();
+        return;
+    }
     
-    if (session && session.user) {
-        currentUser = session.user;
-        showApp();
-        loadMemories();
-    } else {
+    try {
+        console.log('🔐 Checking authentication...');
+        const { data: { session }, error } = await window.supabase.auth.getSession();
+        
+        if (error) {
+            console.error('Auth session error:', error);
+            showAuth();
+            return;
+        }
+        
+        if (session && session.user) {
+            console.log('✅ User authenticated:', session.user.email);
+            currentUser = session.user;
+            showApp();
+            loadMemories();
+        } else {
+            console.log('❌ No active session');
+            showAuth();
+        }
+    } catch (error) {
+        console.error('❌ Auth check failed:', error);
         showAuth();
     }
 }
@@ -51,16 +76,53 @@ async function signup() {
         return;
     }
     
-    const { data, error } = await supabase.auth.signUp({
-        email: email,
-        password: password,
-    });
+    if (!window.supabase) {
+        alert('Service temporarily unavailable. Please try again later.');
+        return;
+    }
     
-    if (error) {
-        alert('Sign up error: ' + error.message);
-    } else {
-        alert('Sign up successful! You can now login.');
-        showAuthTab('login');
+    const authBtn = document.querySelector('#signup-form .auth-btn');
+    const originalText = authBtn.textContent;
+    
+    try {
+        authBtn.textContent = 'Creating account...';
+        authBtn.disabled = true;
+        
+        console.log('📝 Attempting signup for:', email);
+        
+        const { data, error } = await window.supabase.auth.signUp({
+            email: email,
+            password: password,
+        });
+        
+        if (error) {
+            console.error('❌ Signup error:', error);
+            
+            if (error.message?.includes('fetch') || error.message?.includes('network')) {
+                alert('Network error: Please check your internet connection and try again.');
+            } else if (error.message?.includes('email')) {
+                alert('Invalid email format. Please check your email address.');
+            } else if (error.message?.includes('password')) {
+                alert('Password should be at least 6 characters long.');
+            } else {
+                alert('Sign up error: ' + error.message);
+            }
+        } else {
+            console.log('✅ Signup successful:', data);
+            alert('Sign up successful! Please check your email for verification. You can now login.');
+            showAuthTab('login');
+            
+            // Clear form
+            document.getElementById('signup-email').value = '';
+            document.getElementById('signup-password').value = '';
+        }
+        
+    } catch (error) {
+        console.error('❌ Signup exception:', error);
+        alert('Service temporarily unavailable. Please try again later.');
+    } finally {
+        authBtn.textContent = originalText;
+        authBtn.disabled = false;
     }
 }
 
@@ -73,28 +135,75 @@ async function login() {
         return;
     }
     
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-    });
+    if (!window.supabase) {
+        alert('Service temporarily unavailable. Please try again later.');
+        return;
+    }
     
-    if (error) {
-        alert('Login error: ' + error.message);
-    } else {
-        currentUser = data.user;
-        showApp();
-        loadMemories();
+    const authBtn = document.querySelector('#login-form .auth-btn');
+    const originalText = authBtn.textContent;
+    
+    try {
+        authBtn.textContent = 'Signing in...';
+        authBtn.disabled = true;
+        
+        console.log('🔑 Attempting login for:', email);
+        
+        const { data, error } = await window.supabase.auth.signInWithPassword({
+            email: email,
+            password: password,
+        });
+        
+        if (error) {
+            console.error('❌ Login error:', error);
+            
+            if (error.message?.includes('fetch') || error.message?.includes('network')) {
+                alert('Network error: Please check your internet connection and try again.');
+            } else if (error.message?.includes('Invalid login credentials')) {
+                alert('Invalid email or password. Please try again.');
+            } else if (error.message?.includes('Email not confirmed')) {
+                alert('Please verify your email address before logging in.');
+            } else {
+                alert('Login error: ' + error.message);
+            }
+        } else {
+            console.log('✅ Login successful:', data);
+            currentUser = data.user;
+            showApp();
+            loadMemories();
+            
+            // Clear form
+            document.getElementById('login-email').value = '';
+            document.getElementById('login-password').value = '';
+        }
+        
+    } catch (error) {
+        console.error('❌ Login exception:', error);
+        alert('Service temporarily unavailable. Please try again later.');
+    } finally {
+        authBtn.textContent = originalText;
+        authBtn.disabled = false;
     }
 }
 
 async function logout() {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-        console.error('Logout error:', error);
+    if (!window.supabase) {
+        console.error('Supabase not available for logout');
+        return;
     }
-    currentUser = null;
-    memories = [];
-    showAuth();
+    
+    try {
+        const { error } = await window.supabase.auth.signOut();
+        if (error) {
+            console.error('Logout error:', error);
+        }
+        currentUser = null;
+        memories = [];
+        showAuth();
+        console.log('✅ Logged out successfully');
+    } catch (error) {
+        console.error('Logout exception:', error);
+    }
 }
 
 function showAuth() {
@@ -107,7 +216,9 @@ function showApp() {
     document.getElementById('auth-section').style.display = 'none';
     document.querySelector('.app-container').style.display = 'block';
     document.getElementById('user-info').style.display = 'flex';
-    document.getElementById('user-email').textContent = currentUser.email;
+    if (currentUser) {
+        document.getElementById('user-email').textContent = currentUser.email;
+    }
 }
 
 function showAuthTab(tab) {
@@ -120,23 +231,38 @@ function showAuthTab(tab) {
 
 // ======== MEMORY FUNCTIONS WITH SUPABASE ========
 async function loadMemories() {
-    if (!currentUser) return;
-    
-    const { data, error } = await supabase
-        .from('memories')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
-    
-    if (error) {
-        console.error('Error loading memories:', error);
-        memories = [];
-    } else {
-        memories = data || [];
-        console.log('Loaded memories:', memories.length);
+    if (!currentUser || !window.supabase) {
+        console.log('No user or Supabase not available');
+        memories = getLocalMemories();
+        renderMemories();
+        return;
     }
     
-    renderMemories();
+    try {
+        console.log('📚 Loading memories for user:', currentUser.id);
+        
+        const { data, error } = await window.supabase
+            .from('memories')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('Error loading memories:', error);
+            memories = getLocalMemories();
+        } else {
+            memories = data || [];
+            console.log('✅ Loaded memories from Supabase:', memories.length);
+            // Also save to local storage as backup
+            saveLocalMemories(memories);
+        }
+        
+        renderMemories();
+    } catch (error) {
+        console.error('❌ Load memories failed:', error);
+        memories = getLocalMemories();
+        renderMemories();
+    }
 }
 
 async function saveMemoryToSupabase(memoryData) {
@@ -145,166 +271,82 @@ async function saveMemoryToSupabase(memoryData) {
         return null;
     }
     
-    const memoryWithUser = {
+    // First save locally for immediate feedback
+    const localMemory = {
         ...memoryData,
+        id: 'local_' + Date.now(),
         user_id: currentUser.id,
         created_at: new Date().toISOString()
     };
     
-    const { data, error } = await supabase
-        .from('memories')
-        .insert([memoryWithUser])
-        .select();
+    memories.unshift(localMemory);
+    saveLocalMemories(memories);
+    renderMemories();
     
-    if (error) {
-        console.error('Error saving memory:', error);
-        alert('Error saving memory: ' + error.message);
-        return null;
+    if (!window.supabase) {
+        console.warn('Supabase not available, saving locally only');
+        return localMemory;
     }
     
-    return data ? data[0] : null;
-}
-
-async function deleteMemoryFromSupabase(memoryId) {
-    const { error } = await supabase
-        .from('memories')
-        .delete()
-        .eq('id', memoryId)
-        .eq('user_id', currentUser.id);
-    
-    if (error) {
-        console.error('Error deleting memory:', error);
-        alert('Error deleting memory: ' + error.message);
-        return false;
-    }
-    
-    return true;
-}
-
-async function deleteSelectedMemoriesFromSupabase(memoryIds) {
-    const { error } = await supabase
-        .from('memories')
-        .delete()
-        .in('id', Array.from(memoryIds))
-        .eq('user_id', currentUser.id);
-    
-    if (error) {
-        console.error('Error deleting memories:', error);
-        alert('Error deleting memories: ' + error.message);
-        return false;
-    }
-    
-    return true;
-}
-
-// ======== GROQ AI FUNCTIONS ========
-async function generateWithGroq(memoryText, dreamText, emotion, intensity) {
     try {
-        console.log('🚀 Calling Groq API...');
+        const memoryWithUser = {
+            ...memoryData,
+            user_id: currentUser.id,
+            created_at: new Date().toISOString()
+        };
         
-        const response = await fetch(GROQ_CHAT_API, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${GROQ_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'llama3-8b-8192', // Fast and free model
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are DreamDiary AI - a warm, compassionate journal assistant. Create a brief, personalized reflection (2-3 sentences) that responds specifically to what the person wrote. Be genuine, caring, and insightful. Use 1-2 emojis naturally.`
-                    },
-                    {
-                        role: 'user',
-                        content: `The person wrote this in their journal: "${memoryText}"
-${dreamText ? `They also described this dream: "${dreamText}"` : ''}
-Based on their writing, they seem to be feeling ${emotion} (${intensity}% intensity).
-
-Please write a reflection that shows you truly understand their experience and offers gentle insight:`
-                    }
-                ],
-                temperature: 0.8,
-                max_tokens: 150,
-                stream: false
-            })
-        });
-
-        console.log('📊 Groq response status:', response.status);
+        console.log('💾 Saving memory to Supabase...');
         
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('❌ Groq API error:', errorData);
-            throw new Error(`Groq API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
-        }
-
-        const data = await response.json();
-        console.log('✅ Groq response received:', data);
+        const { data, error } = await window.supabase
+            .from('memories')
+            .insert([memoryWithUser])
+            .select();
         
-        if (data.choices && data.choices[0] && data.choices[0].message) {
-            return data.choices[0].message.content.trim();
-        } else {
-            throw new Error('Invalid response format from Groq API');
+        if (error) {
+            console.error('Error saving memory to Supabase:', error);
+            console.log('Memory saved locally only');
+            return localMemory;
         }
         
-    } catch (error) {
-        console.error('❌ Groq API call failed:', error);
-        throw new Error('Groq AI service is currently unavailable. Using enhanced reflection system instead.');
-    }
-}
-
-// Enhanced AI Service with Fallbacks
-class AIService {
-    constructor() {
-        this.providers = ['groq', 'enhanced-local'];
-        this.currentProvider = 'groq';
-    }
-
-    async generateReflection(memoryText, dreamText, emotion, intensity) {
-        console.log(`🤖 Attempting AI reflection with ${this.currentProvider}...`);
-
-        for (const provider of this.providers) {
-            try {
-                let reflection;
-                
-                switch(provider) {
-                    case 'groq':
-                        reflection = await generateWithGroq(memoryText, dreamText, emotion, intensity);
-                        break;
-                    case 'enhanced-local':
-                        reflection = generateEnhancedReflection(memoryText, dreamText, emotion, intensity);
-                        break;
-                }
-
-                if (reflection) {
-                    console.log(`✅ Success with ${provider}`);
-                    this.currentProvider = provider;
-                    return reflection;
-                }
-            } catch (error) {
-                console.warn(`❌ ${provider} failed:`, error.message);
-                continue;
+        console.log('✅ Memory saved to Supabase successfully');
+        
+        // Replace local memory with server memory
+        if (data && data[0]) {
+            const serverMemory = data[0];
+            const localIndex = memories.findIndex(m => m.id === localMemory.id);
+            if (localIndex !== -1) {
+                memories[localIndex] = serverMemory;
+                saveLocalMemories(memories);
             }
+            return serverMemory;
         }
-
-        // Ultimate fallback
-        return this.generateFallbackReflection(emotion);
-    }
-
-    generateFallbackReflection(emotion) {
-        const fallbacks = [
-            "Thank you for sharing this moment. Your words create space for reflection and growth. 📖",
-            "Your self-awareness in this experience is valuable. Each memory adds to your journey. 💫",
-            "This moment matters. Your willingness to reflect shows beautiful emotional intelligence. 🌟",
-            "Your story is safe here. Every experience contributes to your unique path. 📚"
-        ];
         
-        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+        return localMemory;
+    } catch (error) {
+        console.error('❌ Save memory exception:', error);
+        console.log('Memory saved locally only');
+        return localMemory;
     }
 }
 
-// Initialize AI Service
-const aiService = new AIService();
+// Local storage fallback functions
+function getLocalMemories() {
+    try {
+        const localMemories = localStorage.getItem('dreamdiary_local_memories');
+        return localMemories ? JSON.parse(localMemories) : [];
+    } catch (error) {
+        console.error('Error loading local memories:', error);
+        return [];
+    }
+}
+
+function saveLocalMemories(memoriesArray) {
+    try {
+        localStorage.setItem('dreamdiary_local_memories', JSON.stringify(memoriesArray));
+    } catch (error) {
+        console.error('Error saving local memories:', error);
+    }
+}
 
 // ======== MODIFIED EXISTING FUNCTIONS ========
 async function handleFormSubmit(e) {
@@ -317,10 +359,8 @@ async function handleFormSubmit(e) {
     }
     
     const memoryTextElement = document.getElementById('memory-text');
-    const dreamTextElement = document.getElementById('dream-text');
     
     const memoryText = memoryTextElement.value.trim();
-    const dreamText = dreamTextElement ? dreamTextElement.value.trim() : '';
     const photoData = localStorage.getItem('dreamdiary_current_photo') || '';
     
     if (!memoryText) {
@@ -341,24 +381,29 @@ async function handleFormSubmit(e) {
         const emotionData = analyzeTextForEmotion(memoryText);
         console.log('✅ Emotion detected:', emotionData);
         
-        // Get AI reflection from our multi-layer service
-        const aiReflection = await aiService.generateReflection(memoryText, dreamText, emotionData.emotion, emotionData.intensity);
-        console.log('✅ AI reflection generated');
+        // Get AI reflection from Groq API
+        let aiReflection;
+        try {
+            aiReflection = await generateWithGroq(memoryText, emotionData.emotion, emotionData.intensity);
+            console.log('✅ Groq AI reflection generated');
+        } catch (groqError) {
+            console.warn('🤖 Groq failed, using enhanced reflection:', groqError.message);
+            aiReflection = generateEnhancedReflection(memoryText, emotionData.emotion, emotionData.intensity);
+        }
         
         const newMemory = {
             memory_text: memoryText,
-            dream_text: dreamText,
             photo_url: photoData,
             emotion: emotionData.emotion,
             intensity: emotionData.intensity,
             reflection: aiReflection
         };
         
-        // Save to Supabase
+        // Save to Supabase (with local fallback)
         const savedMemory = await saveMemoryToSupabase(newMemory);
         
         if (savedMemory) {
-            console.log('✅ Memory saved to Supabase:', savedMemory);
+            console.log('✅ Memory saved:', savedMemory);
             
             // Show AI reflection
             showReflectionModal({
@@ -381,7 +426,6 @@ async function handleFormSubmit(e) {
         // Fallback: Save with basic reflection
         const fallbackMemory = {
             memory_text: memoryText,
-            dream_text: dreamText,
             photo_url: photoData,
             emotion: 'neutral',
             intensity: 75,
@@ -412,13 +456,67 @@ async function deleteSingleMemory(memoryId, event) {
     }
     
     if (confirm('Are you sure you want to delete this memory?')) {
-        const success = await deleteMemoryFromSupabase(memoryId);
-        if (success) {
-            memories = memories.filter(memory => memory.id !== memoryId);
-            selectedMemories.delete(memoryId);
-            renderMemories();
-            console.log('🗑️ Memory deleted:', memoryId);
+        // Remove from local memories first
+        memories = memories.filter(memory => memory.id !== memoryId);
+        selectedMemories.delete(memoryId);
+        saveLocalMemories(memories);
+        renderMemories();
+        
+        // Try to delete from Supabase if available
+        if (window.supabase && !memoryId.startsWith('local_')) {
+            const success = await deleteMemoryFromSupabase(memoryId);
+            if (!success) {
+                console.log('Memory deleted locally but not from server');
+            }
         }
+        
+        console.log('🗑️ Memory deleted:', memoryId);
+    }
+}
+
+async function deleteMemoryFromSupabase(memoryId) {
+    if (!window.supabase) return false;
+    
+    try {
+        const { error } = await window.supabase
+            .from('memories')
+            .delete()
+            .eq('id', memoryId)
+            .eq('user_id', currentUser.id);
+        
+        if (error) {
+            console.error('Error deleting memory from Supabase:', error);
+            return false;
+        }
+        
+        console.log('✅ Memory deleted from Supabase:', memoryId);
+        return true;
+    } catch (error) {
+        console.error('❌ Delete memory exception:', error);
+        return false;
+    }
+}
+
+async function deleteSelectedMemoriesFromSupabase(memoryIds) {
+    if (!window.supabase) return false;
+    
+    try {
+        const { error } = await window.supabase
+            .from('memories')
+            .delete()
+            .in('id', Array.from(memoryIds))
+            .eq('user_id', currentUser.id);
+        
+        if (error) {
+            console.error('Error deleting memories from Supabase:', error);
+            return false;
+        }
+        
+        console.log(`✅ ${memoryIds.size} memories deleted from Supabase`);
+        return true;
+    } catch (error) {
+        console.error('❌ Delete memories exception:', error);
+        return false;
     }
 }
 
@@ -434,13 +532,24 @@ async function deleteSelectedMemories() {
     }
     
     if (confirm(`Are you sure you want to delete ${selectedMemories.size} ${selectedMemories.size === 1 ? 'memory' : 'memories'}?`)) {
-        const success = await deleteSelectedMemoriesFromSupabase(selectedMemories);
-        if (success) {
-            memories = memories.filter(memory => !selectedMemories.has(memory.id));
-            selectedMemories.clear();
-            renderMemories();
-            console.log(`🗑️ ${selectedMemories.size} memories deleted`);
+        // Remove from local memories first
+        memories = memories.filter(memory => !selectedMemories.has(memory.id));
+        saveLocalMemories(memories);
+        
+        // Try to delete from Supabase if available
+        if (window.supabase) {
+            const serverMemoryIds = Array.from(selectedMemories).filter(id => !id.startsWith('local_'));
+            if (serverMemoryIds.length > 0) {
+                const success = await deleteSelectedMemoriesFromSupabase(serverMemoryIds);
+                if (!success) {
+                    console.log('Memories deleted locally but not from server');
+                }
+            }
         }
+        
+        selectedMemories.clear();
+        renderMemories();
+        console.log(`🗑️ ${selectedMemories.size} memories deleted`);
     }
 }
 
@@ -456,21 +565,31 @@ async function clearAllMemories() {
         return;
     }
     
-    // Delete all memories for current user
-    const { error } = await supabase
-        .from('memories')
-        .delete()
-        .eq('user_id', currentUser.id);
-    
-    if (error) {
-        alert('Error clearing memories: ' + error.message);
-    } else {
+    try {
+        // Clear local memories
         memories = [];
         selectedMemories.clear();
+        saveLocalMemories(memories);
         renderMemories();
+        
+        // Try to clear from Supabase if available
+        if (window.supabase) {
+            const { error } = await window.supabase
+                .from('memories')
+                .delete()
+                .eq('user_id', currentUser.id);
+            
+            if (error) {
+                console.error('Error clearing memories from Supabase:', error);
+            }
+        }
+        
         closeClearModal();
         alert('All memories have been cleared successfully!');
         console.log('🗑️ All memories cleared');
+    } catch (error) {
+        console.error('❌ Clear memories exception:', error);
+        alert('Network error: Could not clear memories. Please try again.');
     }
 }
 
@@ -487,14 +606,14 @@ function renderMemories() {
                 <p style="font-size: 1.1rem;">No memories yet. Start with a moment — big or small.</p>
             </div>
         `;
-        selectionActions.style.display = 'none';
+        if (selectionActions) selectionActions.style.display = 'none';
         return;
     }
     
     memoriesList.innerHTML = memories.map(memory => `
         <div class="memory-card" onclick="toggleMemoryExpand('${memory.id}')">
             <div class="memory-header">
-                <div class="memory-date">${formatShortDate(new Date(memory.created_at))}</div>
+                <div class="memory-date">${formatShortDate(new Date(memory.created_at))} ${memory.id.startsWith('local_') ? '📱' : '☁️'}</div>
                 <div class="memory-actions">
                     <input type="checkbox" class="select-checkbox" id="select-${memory.id}" 
                            onchange="toggleMemorySelection('${memory.id}')" 
@@ -511,16 +630,15 @@ function renderMemories() {
                 <div class="memory-content">
                     <p>${memory.memory_text}</p>
                 </div>
-                ${memory.dream_text ? `
-                <div class="dream-section">
-                    <h4>Dream</h4>
-                    <p>${memory.dream_text}</p>
-                </div>
-                ` : ''}
                 ${memory.photo_url ? `
                 <div class="photo-section">
                     <h4>Photo</h4>
                     <img src="${memory.photo_url}" alt="Memory photo" class="memory-photo">
+                </div>
+                ` : ''}
+                ${memory.id.startsWith('local_') ? `
+                <div class="local-notice" style="margin-top: 1rem; padding: 0.5rem; background: rgba(255, 193, 7, 0.1); border-radius: 8px; font-size: 0.8rem; color: #ff9800;">
+                    📱 Stored locally only
                 </div>
                 ` : ''}
             </div>
@@ -622,11 +740,35 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initializeApp();
     
-    // Check authentication
-    setTimeout(() => {
-        checkAuth();
-        testSupabase();
-    }, 1000);
+    // Check authentication with retry logic
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    function attemptAuthCheck() {
+        setTimeout(() => {
+            if (!window.supabase) {
+                console.error('Supabase not initialized, showing auth screen');
+                showAuth();
+                return;
+            }
+            
+            checkAuth().then(() => {
+                testSupabase();
+            }).catch(error => {
+                console.error('Auth check failed:', error);
+                retryCount++;
+                if (retryCount < maxRetries) {
+                    console.log(`Retrying auth check... (${retryCount}/${maxRetries})`);
+                    attemptAuthCheck();
+                } else {
+                    console.error('Max retries reached. Showing auth screen.');
+                    showAuth();
+                }
+            });
+        }, 1000);
+    }
+    
+    attemptAuthCheck();
 });
 
 // ======== UTILITY FUNCTIONS ========
@@ -661,21 +803,6 @@ function toggleMemoryExpand(memoryId) {
     } else {
         memoryFull.classList.add('active');
         expandBtn.innerHTML = '▾ Show less';
-    }
-}
-
-function toggleDreamSection() {
-    const section = document.getElementById('dream-section');
-    const header = document.querySelector('.collapsible-header span');
-    
-    if (!section || !header) return;
-    
-    if (section.classList.contains('active')) {
-        section.classList.remove('active');
-        header.textContent = '▸ Did you have a dream?';
-    } else {
-        section.classList.add('active');
-        header.textContent = '▾ Did you have a dream?';
     }
 }
 
@@ -1053,73 +1180,59 @@ function updateCountdown() {
     countdownElement.textContent = nextSummaryIn;
 }
 
-// Enhanced Local Reflection System
-function generateEnhancedReflection(memoryText, dreamText, emotion, intensity) {
-    const text = memoryText.toLowerCase();
-    
-    const contexts = {
-        work: /(work|job|office|meeting|boss|colleague|project|deadline|career|salary|promotion|team)/.test(text),
-        family: /(family|mom|dad|parent|child|son|daughter|wife|husband|partner|sibling|brother|sister)/.test(text),
-        friends: /(friend|buddy|pal|hang out|together|group|social|party|dinner|coffee)/.test(text),
-        nature: /(walk|park|outside|sun|nature|tree|sky|beach|mountain|hike|garden|fresh air)/.test(text),
-        achievement: /(finished|completed|achieved|accomplished|succeeded|won|award|milestone|goal)/.test(text),
-        health: /(sick|ill|pain|doctor|hospital|health|recovery|medicine|therapy|wellness)/.test(text),
-        creative: /(write|paint|draw|create|music|art|poem|story|design|build|craft|project)/.test(text),
-        learning: /(learn|study|read|book|course|knowledge|skill|education)/.test(text)
-    };
+// AI Functions (Groq integration)
+async function generateWithGroq(memoryText, emotion, intensity) {
+    try {
+        console.log('🚀 Calling Groq API...');
+        
+        const response = await fetch(GROQ_CHAT_API, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'llama3-8b-8192', // Fast and free model from Groq
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are DreamDiary AI - a warm, compassionate journal assistant. Create a brief, personalized reflection (2-3 sentences) that responds specifically to what the person wrote. Be genuine, caring, and insightful. Use 1-2 emojis naturally.`
+                    },
+                    {
+                        role: 'user',
+                        content: `The person wrote this in their journal: "${memoryText}"
+Based on their writing, they seem to be feeling ${emotion} (${intensity}% intensity).
 
-    const context = Object.keys(contexts).find(key => contexts[key]) || 'general';
+Please write a reflection that shows you truly understand their experience and offers gentle insight:`
+                    }
+                ],
+                temperature: 0.8,
+                max_tokens: 150,
+                stream: false
+            })
+        });
 
-    const reflections = {
-        joy: {
-            work: `Your work satisfaction is wonderful! ${intensity > 80 ? "The sheer joy in your professional life is truly inspiring!" : "Finding happiness in work makes such a difference."} 🌟`,
-            family: `The love in family moments creates precious memories. ${text.includes('laugh') ? "The laughter and connection you shared is beautiful!" : "These bonds are truly special."} 💕`,
-            friends: `Friendship joy is pure magic! ${text.includes('together') ? "Time spent with loved ones creates the best memories." : "These connections nourish the soul."} 😊`,
-            nature: `Nature's beauty combined with your joyful spirit is perfect. ${text.includes('sun') ? "The sunshine seems to mirror your inner light!" : "The peace you found is palpable."} 🌿`,
-            achievement: `Celebrating achievements with genuine happiness is important! ${intensity > 85 ? "Your well-deserved success radiates through your words!" : "You've earned this joyful moment."} 🎉`,
-            health: `Finding joy in health and recovery is powerful! ${text.includes('better') ? "Your improving wellbeing shines through beautifully!" : "Your positive outlook is inspiring."} 💪`,
-            creative: `Creative joy is so fulfilling! ${text.includes('create') ? "The satisfaction of bringing something new into the world is magical!" : "Your artistic expression is wonderful."} 🎨`,
-            learning: `Learning with joy is incredible! ${text.includes('discover') ? "The thrill of discovery is absolutely wonderful!" : "Your curiosity and growth are inspiring."} 📚`,
-            general: `Your happiness is contagious! ${intensity > 75 ? "This radiant joy truly lights up the page!" : "These positive moments are precious gifts."} ✨`
-        },
-        sadness: {
-            work: `Work challenges can be heavy. ${intensity > 70 ? "The weight of this professional struggle is palpable, but your resilience shines through." : "Your awareness of these difficulties shows emotional intelligence."} 💪`,
-            family: `Family emotions run deep. ${text.includes('miss') ? "The ache of missing someone shows how much you care." : "Your willingness to feel these complex emotions is brave."} 🫂`,
-            health: `Health struggles are incredibly difficult. ${text.includes('pain') ? "The physical or emotional pain you're experiencing is valid and real." : "Your strength in facing health challenges is admirable."} 🏥`,
-            general: `There's courage in honoring sad moments. ${intensity > 80 ? "The depth of this sadness speaks to your capacity for deep feeling." : "Your emotional honesty creates space for healing."} 💙`
-        },
-        anger: {
-            work: `Work frustrations are completely valid. ${intensity > 75 ? "The intensity of your reaction shows how much you care about fairness and respect." : "Your strong boundaries in professional settings are important."} 🔥`,
-            general: `Your powerful emotions highlight important values. ${text.includes('unfair') ? "Your sense of justice is clear and deserves to be heard." : "This intensity often precedes meaningful change."} 💎`
-        },
-        fear: {
-            work: `Work anxieties are real. ${intensity > 70 ? "The overwhelming nature of these worries is completely understandable." : "Your awareness of workplace stress is actually protective."} 🛡️`,
-            health: `Health worries can be consuming. ${text.includes('scared') ? "The fear you're experiencing is valid and human." : "Your vigilance about wellbeing comes from self-care."} 💊`,
-            general: `Facing fears takes remarkable courage. ${intensity > 75 ? "The magnitude of what you're facing is real, and so is your strength." : "Your emotional awareness is your greatest asset here."} 🌟`
-        },
-        surprise: {
-            work: `Unexpected moments at work! ${intensity > 70 ? "This surprise really shook things up in your professional world!" : "Your adaptability in unexpected situations is impressive."} ⚡`,
-            general: `Life's surprises keep us growing! ${intensity > 70 ? "The sheer unexpectedness of this moment is electrifying!" : "Your openness to surprises shows wonderful adaptability."} 🎊`
-        },
-        neutral: {
-            general: `Your calm observation creates space for insight. ${text.includes('think') ? "Your thoughtful reflection shows wonderful self-awareness." : "There's wisdom in quiet moments of awareness."} 🕊️`
+        console.log('📊 Groq response status:', response.status);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('❌ Groq API error:', errorData);
+            throw new Error(`Groq API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
         }
-    };
 
-    const reflection = reflections[emotion]?.[context] || 
-                      reflections[emotion]?.general || 
-                      "Thank you for sharing this meaningful moment. Your self-awareness creates space for insight and growth. 📖";
-
-    if (dreamText && dreamText.trim().length > 0) {
-        const dreamInsights = [
-            " Your dream adds fascinating layers to today's emotional landscape.",
-            " The dream narrative provides deep insight into your subconscious processing.",
-            " Your nighttime journey offers valuable perspective on your waking experiences."
-        ];
-        return reflection + dreamInsights[Math.floor(Math.random() * dreamInsights.length)];
+        const data = await response.json();
+        console.log('✅ Groq response received:', data);
+        
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+            return data.choices[0].message.content.trim();
+        } else {
+            throw new Error('Invalid response format from Groq API');
+        }
+        
+    } catch (error) {
+        console.error('❌ Groq API call failed:', error);
+        throw new Error('Groq AI service is currently unavailable. Using enhanced reflection system instead.');
     }
-
-    return reflection;
 }
 
 function analyzeTextForEmotion(text) {
@@ -1198,4 +1311,61 @@ function analyzeTextForEmotion(text) {
     };
 }
 
+function generateEnhancedReflection(memoryText, emotion, intensity) {
+    const text = memoryText.toLowerCase();
+    
+    const contexts = {
+        work: /(work|job|office|meeting|boss|colleague|project|deadline|career|salary|promotion|team)/.test(text),
+        family: /(family|mom|dad|parent|child|son|daughter|wife|husband|partner|sibling|brother|sister)/.test(text),
+        friends: /(friend|buddy|pal|hang out|together|group|social|party|dinner|coffee)/.test(text),
+        nature: /(walk|park|outside|sun|nature|tree|sky|beach|mountain|hike|garden|fresh air)/.test(text),
+        achievement: /(finished|completed|achieved|accomplished|succeeded|won|award|milestone|goal)/.test(text),
+        health: /(sick|ill|pain|doctor|hospital|health|recovery|medicine|therapy|wellness)/.test(text),
+        creative: /(write|paint|draw|create|music|art|poem|story|design|build|craft|project)/.test(text),
+        learning: /(learn|study|read|book|course|knowledge|skill|education)/.test(text)
+    };
 
+    const context = Object.keys(contexts).find(key => contexts[key]) || 'general';
+
+    const reflections = {
+        joy: {
+            work: `Your work satisfaction is wonderful! ${intensity > 80 ? "The sheer joy in your professional life is truly inspiring!" : "Finding happiness in work makes such a difference."} 🌟`,
+            family: `The love in family moments creates precious memories. ${text.includes('laugh') ? "The laughter and connection you shared is beautiful!" : "These bonds are truly special."} 💕`,
+            friends: `Friendship joy is pure magic! ${text.includes('together') ? "Time spent with loved ones creates the best memories." : "These connections nourish the soul."} 😊`,
+            nature: `Nature's beauty combined with your joyful spirit is perfect. ${text.includes('sun') ? "The sunshine seems to mirror your inner light!" : "The peace you found is palpable."} 🌿`,
+            achievement: `Celebrating achievements with genuine happiness is important! ${intensity > 85 ? "Your well-deserved success radiates through your words!" : "You've earned this joyful moment."} 🎉`,
+            health: `Finding joy in health and recovery is powerful! ${text.includes('better') ? "Your improving wellbeing shines through beautifully!" : "Your positive outlook is inspiring."} 💪`,
+            creative: `Creative joy is so fulfilling! ${text.includes('create') ? "The satisfaction of bringing something new into the world is magical!" : "Your artistic expression is wonderful."} 🎨`,
+            learning: `Learning with joy is incredible! ${text.includes('discover') ? "The thrill of discovery is absolutely wonderful!" : "Your curiosity and growth are inspiring."} 📚`,
+            general: `Your happiness is contagious! ${intensity > 75 ? "This radiant joy truly lights up the page!" : "These positive moments are precious gifts."} ✨`
+        },
+        sadness: {
+            work: `Work challenges can be heavy. ${intensity > 70 ? "The weight of this professional struggle is palpable, but your resilience shines through." : "Your awareness of these difficulties shows emotional intelligence."} 💪`,
+            family: `Family emotions run deep. ${text.includes('miss') ? "The ache of missing someone shows how much you care." : "Your willingness to feel these complex emotions is brave."} 🫂`,
+            health: `Health struggles are incredibly difficult. ${text.includes('pain') ? "The physical or emotional pain you're experiencing is valid and real." : "Your strength in facing health challenges is admirable."} 🏥`,
+            general: `There's courage in honoring sad moments. ${intensity > 80 ? "The depth of this sadness speaks to your capacity for deep feeling." : "Your emotional honesty creates space for healing."} 💙`
+        },
+        anger: {
+            work: `Work frustrations are completely valid. ${intensity > 75 ? "The intensity of your reaction shows how much you care about fairness and respect." : "Your strong boundaries in professional settings are important."} 🔥`,
+            general: `Your powerful emotions highlight important values. ${text.includes('unfair') ? "Your sense of justice is clear and deserves to be heard." : "This intensity often precedes meaningful change."} 💎`
+        },
+        fear: {
+            work: `Work anxieties are real. ${intensity > 70 ? "The overwhelming nature of these worries is completely understandable." : "Your awareness of workplace stress is actually protective."} 🛡️`,
+            health: `Health worries can be consuming. ${text.includes('scared') ? "The fear you're experiencing is valid and human." : "Your vigilance about wellbeing comes from self-care."} 💊`,
+            general: `Facing fears takes remarkable courage. ${intensity > 75 ? "The magnitude of what you're facing is real, and so is your strength." : "Your emotional awareness is your greatest asset here."} 🌟`
+        },
+        surprise: {
+            work: `Unexpected moments at work! ${intensity > 70 ? "This surprise really shook things up in your professional world!" : "Your adaptability in unexpected situations is impressive."} ⚡`,
+            general: `Life's surprises keep us growing! ${intensity > 70 ? "The sheer unexpectedness of this moment is electrifying!" : "Your openness to surprises shows wonderful adaptability."} 🎊`
+        },
+        neutral: {
+            general: `Your calm observation creates space for insight. ${text.includes('think') ? "Your thoughtful reflection shows wonderful self-awareness." : "There's wisdom in quiet moments of awareness."} 🕊️`
+        }
+    };
+
+    const reflection = reflections[emotion]?.[context] || 
+                      reflections[emotion]?.general || 
+                      "Thank you for sharing this meaningful moment. Your self-awareness creates space for insight and growth. 📖";
+
+    return reflection;
+}
