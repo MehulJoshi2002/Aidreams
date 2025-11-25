@@ -7,6 +7,11 @@ let currentUser = null;
 const GROQ_API_KEY = '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';
 const GROQ_CHAT_API = 'https://api.groq.com/openai/v1/chat/completions';
 
+const SUPABASE_CONFIG = {
+    url: "https://bxgiqrcpxsmjlzjlirek.supabase.co",
+    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4Z2lxcmNweHNtamx6amxpcmVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0MzAxNDYsImV4cCI6MjA3ODAwNjE0Nn0.UT-13X6k4HAIwhrQ_j6zD6ICaNxN9zmOfPJK3iORtjM"
+};
+
 // ======== SUPABASE FUNCTIONS ========
 async function testSupabase() {
     console.log('🧪 Testing Supabase connection...');
@@ -1192,4 +1197,5 @@ function analyzeTextForEmotion(text) {
         intensity: intensity
     };
 }
+
 
