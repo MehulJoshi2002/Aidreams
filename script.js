@@ -724,13 +724,14 @@ function initializeApp() {
 }
 
 // Test Groq API connectivity
+// Test Groq API connectivity
 async function testGroqAPI() {
     console.log('🧪 Testing Groq API connectivity...');
     console.log('API Key length:', GROQ_API_KEY ? GROQ_API_KEY.length : 'Missing');
     console.log('API Key starts with:', GROQ_API_KEY ? GROQ_API_KEY.substring(0, 10) + '...' : 'Missing');
     
     try {
-        // Simple test with minimal content
+        // Simple test with current model
         const testResponse = await fetch(GROQ_CHAT_API, {
             method: 'POST',
             headers: {
@@ -738,7 +739,7 @@ async function testGroqAPI() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'llama3-8b-8192',
+                model: 'llama-3.1-8b-instant',
                 messages: [
                     {
                         role: 'user',
@@ -1226,65 +1227,89 @@ function updateCountdown() {
 }
 
 // AI Functions (Groq integration)
+// AI Functions (Groq integration)
 async function generateWithGroq(memoryText, emotion, intensity) {
     try {
         console.log('🚀 Calling Groq API...');
-        console.log('API Key present:', !!GROQ_API_KEY);
-        console.log('API URL:', GROQ_CHAT_API);
         
-        const response = await fetch(GROQ_CHAT_API, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${GROQ_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'llama3-8b-8192',
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are DreamDiary AI - a warm, compassionate journal assistant. Create a brief, personalized reflection (2-3 sentences) that responds specifically to what the person wrote. Be genuine, caring, and insightful. Use 1-2 emojis naturally.`
+        // Try different available models
+        const models = [
+            'llama-3.1-8b-instant',  // Fast model
+            'llama-3.1-70b-versatile', // Powerful model
+            'mixtral-8x7b-32768',    // Alternative model
+            'gemma2-9b-it'           // Another alternative
+        ];
+
+        let lastError = null;
+
+        for (const model of models) {
+            try {
+                console.log(`🔄 Trying model: ${model}`);
+                
+                const response = await fetch(GROQ_CHAT_API, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${GROQ_API_KEY}`,
+                        'Content-Type': 'application/json',
                     },
-                    {
-                        role: 'user',
-                        content: `The person wrote this in their journal: "${memoryText}"
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            {
+                                role: 'system',
+                                content: `You are DreamDiary AI - a warm, compassionate journal assistant. Create a brief, personalized reflection (2-3 sentences) that responds specifically to what the person wrote. Be genuine, caring, and insightful. Use 1-2 emojis naturally.`
+                            },
+                            {
+                                role: 'user',
+                                content: `The person wrote this in their journal: "${memoryText}"
 Based on their writing, they seem to be feeling ${emotion} (${intensity}% intensity).
 
 Please write a reflection that shows you truly understand their experience and offers gentle insight:`
-                    }
-                ],
-                temperature: 0.8,
-                max_tokens: 150,
-                stream: false
-            })
-        });
+                            }
+                        ],
+                        temperature: 0.8,
+                        max_tokens: 150,
+                        stream: false
+                    })
+                });
 
-        console.log('📊 Groq response status:', response.status);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Groq API error response:', errorText);
-            throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+                console.log(`📊 ${model} response status:`, response.status);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    lastError = new Error(`${model} error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+                    console.log(`❌ ${model} failed:`, errorData.error?.message);
+                    continue; // Try next model
+                }
+
+                const data = await response.json();
+                console.log(`✅ Success with model: ${model}`);
+                
+                if (data.choices && data.choices[0] && data.choices[0].message) {
+                    const reflection = data.choices[0].message.content.trim();
+                    console.log('✅ AI Reflection:', reflection);
+                    return reflection;
+                } else {
+                    console.error(`❌ Invalid response format from ${model}:`, data);
+                    continue; // Try next model
+                }
+                
+            } catch (error) {
+                lastError = error;
+                console.log(`❌ ${model} error:`, error.message);
+                continue; // Try next model
+            }
         }
 
-        const data = await response.json();
-        console.log('✅ Groq response received:', data);
-        
-        if (data.choices && data.choices[0] && data.choices[0].message) {
-            const reflection = data.choices[0].message.content.trim();
-            console.log('✅ AI Reflection:', reflection);
-            return reflection;
-        } else {
-            console.error('❌ Invalid response format:', data);
-            throw new Error('Invalid response format from Groq API');
-        }
+        // If all models fail, throw the last error
+        throw lastError || new Error('All Groq models failed');
         
     } catch (error) {
-        console.error('❌ Groq API call failed:', error);
-        console.error('Error details:', error.message);
+        console.error('❌ All Groq API calls failed:', error);
         throw new Error('Groq AI service is currently unavailable. Using enhanced reflection system instead.');
     }
 }
+
 
 function analyzeTextForEmotion(text) {
     const lowerText = text.toLowerCase();
@@ -1420,3 +1445,4 @@ function generateEnhancedReflection(memoryText, emotion, intensity) {
 
     return reflection;
 }
+
