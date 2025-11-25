@@ -1192,3 +1192,4 @@ function analyzeTextForEmotion(text) {
         intensity: intensity
     };
 }
+
